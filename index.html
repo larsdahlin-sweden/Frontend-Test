@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="sv" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Card + Datepicker + Dark mode + Density</title>
+
+  <!-- Flatpickr (bas) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+
+  <!-- Din CSS -->
+  <link rel="stylesheet" href="style.css" />
+
+  <!-- Flatpickr (JS) defer för säker init-ordning -->
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/sv.js" defer></script>
+</head>
+<body>
+  <main>
+    <article class="card card-elevated" role="region" aria-labelledby="cardTitle">
+      <header class="card-header">
+        <div class="card-title">
+          <h3 id="cardTitle">Planera datum</h3>
+          <p class="card-subtitle">Välj ett datum eller en period</p>
+        </div>
+
+        <div class="header-actions">
+          <!-- Täthet (density) toggle -->
+          <button id="densityToggle" class="btn btn-ghost" aria-pressed="false" title="Växla avstånd (Compact/Comfy)">
+            ⬍ Luft: Normal
+          </button>
+
+          <!-- Dark-mode toggle -->
+          <button id="themeToggle" class="btn btn-ghost" aria-pressed="false" title="Växla tema">
+            🌙 Mörkt
+          </button>
+        </div>
+      </header>
+
+      <section class="card-body">
+        <div id="formGrid" class="form-grid"> <!-- density-klass sätts via JS -->
+          <div class="form-field">
+            <label for="dp" class="date-label">Välj datum</label>
+            <input type="text" id="dp" class="date-input" placeholder="Välj datum" aria-label="Välj datum" />
+            <p class="help-text">Du kan skriva YYYY-MM-DD direkt.</p>
+          </div>
+
+          <div class="form-field" id="rangeField">
+            <label for="dp-range" class="date-label">Välj period</label>
+            <input type="text" id="dp-range" class="date-input" placeholder="Från – till" aria-label="Välj period" />
+            <p class="error-text" id="rangeError" role="alert" aria-live="polite"></p>
+          </div>
+        </div>
+      </section>
+
+      <footer class="card-footer">
+        <button class="btn" id="saveBtn">Spara</button>
+        <button class="btn btn-ghost" id="cancelBtn">Avbryt</button>
+      </footer>
+    </article>
+  </main>
+
+  <!-- Init-script: tema + flatpickr + density -->
+  <script>
+    window.addEventListener('DOMContentLoaded', () => {
+      /* ========= Tema (dark/light) ========= */
+      const html = document.documentElement;
+      const themeBtn  = document.getElementById('themeToggle');
+      const savedTheme = localStorage.getItem('theme');
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const initialTheme = savedTheme || (prefersDark ? 'dark' : 'light');
+      applyTheme(initialTheme);
+
+      themeBtn?.addEventListener('click', () => {
+        const next = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+        applyTheme(next);
+      });
+
+      function applyTheme(mode) {
+        html.setAttribute('data-theme', mode);
+        localStorage.setItem('theme', mode);
+        if (themeBtn) {
+          themeBtn.setAttribute('aria-pressed', String(mode === 'dark'));
+          themeBtn.textContent = mode === 'dark' ? '☀️ Ljust' : '🌙 Mörkt';
+        }
+      }
+
+      /* ========= Density (compact/comfy) ========= */
+      const densityBtn = document.getElementById('densityToggle');
+      const formGrid = document.getElementById('formGrid');
+      const savedDensity = localStorage.getItem('density') || 'normal'; // 'normal' | 'comfy' | 'compact'
+      applyDensity(savedDensity);
+
+      densityBtn?.addEventListener('click', () => {
+        // Cykla: normal -> comfy -> compact -> normal
+        const current = localStorage.getItem('density') || 'normal';
+        const next = current === 'normal' ? 'comfy' : current === 'comfy' ? 'compact' : 'normal';
+        applyDensity(next);
+      });
+
+      function applyDensity(mode) {
+        formGrid?.classList.remove('density-normal', 'density-comfy', 'density-compact');
+        formGrid?.classList.add('density-' + mode);
+        localStorage.setItem('density', mode);
+        if (densityBtn) {
+          const label =
+            mode === 'comfy' ? '⬍ Luft: Stor' :
+            mode === 'compact' ? '⬍ Luft: Liten' :
+            '⬍ Luft: Normal';
+          densityBtn.textContent = label;
+          densityBtn.setAttribute('aria-pressed', String(mode !== 'normal'));
+        }
+      }
+
+      /* ========= Flatpickr ========= */
+      if (typeof window.flatpickr !== 'function') {
+        console.error('Flatpickr kunde inte laddas (kontrollera nätverk/skriptlänkar).');
+        return;
+      }
+
+      const svLocale = (window.flatpickr.l10ns && window.flatpickr.l10ns.sv) || {};
+      const baseOptions = {
+        locale: svLocale,
+        dateFormat: "Y-m-d",
+        altInput: true,
+        altFormat: "D j M Y",
+        allowInput: true,
+        weekNumbers: true,
+        prevArrow: "‹", nextArrow: "›",
+        onDayCreate: function(_, __, ___, dayElem){
+          const d = dayElem.dateObj;
+          dayElem.setAttribute("aria-label", d.toLocaleDateString('sv-SE', {
+            weekday:'long', year:'numeric', month:'long', day:'numeric'
+          }));
+        }
+      };
+
+      const dp = flatpickr("#dp", { ...baseOptions, defaultDate: "today" });
+      const dpRange = flatpickr("#dp-range", { ...baseOptions, mode: "range" });
+
+      /* ========= Validering ========= */
+      const saveBtn = document.getElementById('saveBtn');
+      const cancelBtn = document.getElementById('cancelBtn');
+      const rangeField = document.getElementById('rangeField');
+      const rangeError = document.getElementById('rangeError');
+
+      function clearError() {
+        rangeField?.classList.remove('field-error');
+        if (rangeError) rangeError.textContent = '';
+      }
+      function showError(msg) {
+        rangeField?.classList.add('field-error');
+        if (rangeError) rangeError.textContent = msg;
+      }
+
+      saveBtn?.addEventListener('click', () => {
+        clearError();
+        const dates = dpRange?.selectedDates || [];
+        if (dates.length === 2) {
+          const [start, end] = dates;
+          if (end < start) {
+            showError('Slutdatum kan inte vara före startdatum.');
+            return;
+          }
+        }
+        alert('Sparat! (lägg din logik här)');
+      });
+
+      cancelBtn?.addEventListener('click', () => {
+        clearError();
+        document.getElementById('dp').value = '';
+        document.getElementById('dp-range').value = '';
+        dp?.clear();
+        dpRange?.clear();
+      });
+    });
+  </script>
+</body>
+</html>
